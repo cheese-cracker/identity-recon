@@ -15,17 +15,10 @@ const sequelize = new Sequelize({
 // Define the User model
 const Contact = sequelize.define('Contact', {
   phoneNumber: {
-     type: DataTypes.STRING,
-     allowNull: true,
+    type: DataTypes.STRING,
+    allowNull: true,
     validate: {
-      isPhoneNumber(value) {
-        // Simple regex for phone no.
-        const phoneRegex = /^[0-9\+\-]+$/
-
-        if (!phoneRegex.test(value)) {
-          throw new Error('Invalid phone number')
-        }
-      },
+      isNumeric: true
     }
   },
   email: {
@@ -42,13 +35,16 @@ const Contact = sequelize.define('Contact', {
   },
   linkPrecedence: {
     type: DataTypes.STRING,
-    defaultValue: "primary"
+    defaultValue: "primary",
+    validate: {
+      isIn: [["primary", "secondary"]],
+    },
   }
 }
 )
 
-Contact.findTopLinkId = async ( partialContactObj ) => {
-  const currentContact = await Contact.findOne(partialContactObj)
+Contact.findTopLinkId = async ( whereClause ) => {
+  const currentContact = await Contact.findOne({ where: whereClause })
   if(!currentContact){
     return null
   }
@@ -59,47 +55,87 @@ Contact.findTopLinkId = async ( partialContactObj ) => {
 }
 
 Contact.unionCreate = async(contactObj) => {
-  
-  const phoneLinkId = await Contact.findTopLinkId({ phoneNumber: contactObj.phoneNumber })
-  const emailLinkId = await Contact.findTopLinkId({ email: contactObj.email })
-
+  let phoneLinkId, emailLinkId, otherContacts
   let selectedLinkId = null
   let selectedLinkPrecedence = "primary"
-  let otherContacts 
-  if(phoneLinkId == emailLinkId){
-    return await Contact.findByPk(emailLinkId)    
-  }else if(phoneLinkId !== null && emailLinkId !== null){
-    const phoneContact = await Contact.findByPk(phoneLinkId)
-    const emailContact = await Contact.findByPk(emailLinkId)
-
-    // Set all contacts that match the linkedId of the newer object to the older object
-    if(phoneContact.createdAt < emailContact.createdAt){
-      selectedLinkId = phoneLinkId
-      otherContacts = await Contact.findAll({ linkedId: emailLinkId })
-    }else{
-      selectedLinkId = emailLinkId
-      otherContacts = await Contact.findAll({ linkedId: phoneLinkId })
-    }
-    await Promise.all(otherContacts.map(async (contact) => {
-        contact.linkedId = selectedLinkId        
-        await contact.save()
-      })
-    )
-    selectedLinkPrecedence = "secondary"
-  }else if (!phoneLinkId){
-    selectedLinkId = emailLinkId
-    selectedLinkPrecedence = "secondary"
-  }else if (!emailLinkId){
-    selectedLinkId  = phoneLinkId
-    selectedLinkPrecedence = "secondary"
+  try{
+    phoneLinkId = await Contact.findTopLinkId({ phoneNumber: contactObj.phoneNumber })
+    emailLinkId = await Contact.findTopLinkId({ email: contactObj.email })
+  } catch(error){
+    console.error("Failed to retreive LinkIds: ", error)
   }
+  console.error(phoneLinkId, emailLinkId)
+  try{
+    if(phoneLinkId !== null && phoneLinkId == emailLinkId){
+      return await Contact.findByPk(phoneLinkId)
+    }else if(phoneLinkId !== null && emailLinkId !== null){
+      const phoneContact = await Contact.findByPk(phoneLinkId)
+      const emailContact = await Contact.findByPk(emailLinkId)
 
-  // Set the Final Contact Object
-  contactObj.linkPrecedence = selectedLinkPrecedence
-  contactObj.linkedId = selectedLinkId
-  contactObj.save()
+      // Set all contacts that match the linkedId of the newer object to the older object
+      if(phoneContact.createdAt < emailContact.createdAt){
+        selectedLinkId = phoneLinkId
+        otherContacts = await Contact.findAll({ where: { linkedId: emailLinkId } })
+      }else{
+        selectedLinkId = emailLinkId
+        otherContacts = await Contact.findAll({ where: { linkedId: phoneLinkId } })
+      }
+      await Promise.all(otherContacts.map(async (contact) => {
+          contact.linkedId = selectedLinkId
+          await contact.save()
+        })
+      )
+      selectedLinkPrecedence = "secondary"
+    }else if (phoneLinkId !== null){
+      selectedLinkId = phoneLinkId
+      selectedLinkPrecedence = "secondary"
+    }else if (emailLinkId !== null){
+      selectedLinkId  = emailLinkId
+      selectedLinkPrecedence = "secondary"
+    }
 
-  return contactObj
+    // Set the Final Contact Object
+    contactObj.linkPrecedence = selectedLinkPrecedence
+    contactObj.linkedId = selectedLinkId
+    console.error(contactObj)
+    const newContact = Contact.create(contactObj)
+    return newContact
+
+  } catch (error) {
+    console.error("Failed at union creation: ", error)
+  }
+}
+
+// GroupBy LinkedId and provide the results in specified format (MapReduce-like)
+Contact.groupByLinkedId = async (contactObj) => {
+  const linkId = contactObj.linkedId || contactObj.id
+
+  const allContacts = await Contact.findAll({ where:
+    {
+      [Op.or] : [ { linkedId: linkId }, { id: linkId } ]
+    }
+  })
+
+  // Select unique emails and phone nos. from grouped Set
+  let emailSet   = new Set()
+  let phoneSet  = new Set()
+  let secondaryIdSet = new Set()
+  await Promise.all(allContacts.map((contact) => {
+      secondaryIdSet.add(contact.id)
+      emailSet.add(contact.email)
+      phoneSet.add(contact.phoneNumber)
+  }))
+  const emailList = [...emailSet].filter((item) => item !== null)
+  const phoneList = [...phoneSet].filter((item) => item !== null)
+  const secondaryIdList = [...secondaryIdSet].filter((id) => id !== linkId)
+
+  const contactGroupObj = {
+    primaryContactId: linkId,
+    emails: emailList,
+    phoneNumbers: phoneList,
+    secondaryContactIds: secondaryIdList
+  }
+  return { contact: contactGroupObj }
 }
 
 // Sync the model with the database
@@ -114,29 +150,28 @@ sequelize.sync()
 // Middleware to parse JSON request bodies
 app.use(express.json())
 
-// Identity API 
+// Identity API
 app.post('/identity', async (req, res) => {
   try {
-    const phoneNo = res.body.phoneNo
-    const email = res.body.email
+    const { phoneNumber, email } = req.body
 
     // TODO: Validate PhoneNo. email
 
     // Create Logic
-    if(!email && !phoneNo){
-        return res.status(404).json({error: 'No contact details provided as neither email nor phoneNo. was provided.' }) 
+    let result
+    if(!email && !phoneNumber){
+      return res.status(404).json({error: 'No contact details provided as neither email nor phoneNumber. was provided.' })
     }else if (!email){
-        const { phoneContact, _ } = await Contact.findOrCreate({ phoneNumber: phoneNo })
-        return findUnionAndSendResponse(res, phoneContact)
-    }else if(!phoneNo){
-        const { emailContact, _ } = await Contact.findOrCreate({ email: email })
-        return findUnionAndSendResponse(res, emailContact)
+      const { newContact, _ } = await Contact.findOrCreate({ phoneNumber: phoneNumber })
+      result = await Contact.groupByLinkedId(newContact)
+    }else if(!phoneNumber){
+      const { newContact, _ } = await Contact.findOrCreate({ email: email })
+      result = await Contact.groupByLinkedId(newContact)
     }else{
-        const emailContact = await Contact.findOne({email: email})
-        const phoneContact = await Contact.findOne({phoneNumber: phoneNo})
-        const { newContact, _ } = await Contact.findOrCreate({ phoneNumber: phoneNo, email: email })
-        return findUnionAndSendResponse(res, newContact)
+      const newContact = await Contact.unionCreate({phoneNumber: phoneNumber, email: email})
+      result = await Contact.groupByLinkedId(newContact)
     }
+    return res.status(201).json(result)
   } catch (error) {
     console.error(req.body)
     console.error('Error creating contact:', error)
@@ -159,7 +194,9 @@ contactRouter.get('', async (req, res) => {
 
 contactRouter.post('', async (req, res) => {
   try {
+    console.error(req.body)
     const { phoneNumber, email, linkedId, linkedPrecedence } = req.body
+    console.error(phoneNumber, email, linkedId, linkedPrecedence)
     const contact = await Contact.create({ phoneNumber, email, linkedId, linkedPrecedence })
     res.status(201).json(contact)
   } catch (error) {
@@ -173,11 +210,11 @@ contactRouter.put('/:id', async (req, res) => {
     const { id } = req.params
     const { phoneNumber, email, linkedId, linkPrecedence } = req.body
     const contact = await Contact.findByPk(id)
-    
+
     if (!Contact) {
       return res.status(404).json({ error: 'Contact not found' })
     }
-    
+
     contact.phoneNumber = phoneNumber
     contact.email = email
     contact.linkedId = linkedId
@@ -195,7 +232,7 @@ contactRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
     const contact = await Contact.findByPk(id)
-    
+
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' })
     }
