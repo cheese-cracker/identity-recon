@@ -24,7 +24,6 @@ const Contact = sequelize.define('Contact', {
   email: {
     type: DataTypes.STRING,
     allowNull: true,
-    unique: true,
     validate: {
       isEmail: true,
     },
@@ -153,23 +152,31 @@ app.use(express.json())
 // Identity API
 app.post('/identity', async (req, res) => {
   try {
-    const { phoneNumber, email } = req.body
+    const phoneNumber = req.body.phoneNumber || null
+    const email       = req.body.email       || null
 
     // TODO: Validate PhoneNo. email
 
     // Create Logic
     let result
-    if(!email && !phoneNumber){
-      return res.status(404).json({error: 'No contact details provided as neither email nor phoneNumber. was provided.' })
-    }else if (!email){
-      const { newContact, _ } = await Contact.findOrCreate({ phoneNumber: phoneNumber })
-      result = await Contact.groupByLinkedId(newContact)
-    }else if(!phoneNumber){
-      const { newContact, _ } = await Contact.findOrCreate({ email: email })
-      result = await Contact.groupByLinkedId(newContact)
-    }else{
+    if(email !== null && phoneNumber !== null){
       const newContact = await Contact.unionCreate({phoneNumber: phoneNumber, email: email})
       result = await Contact.groupByLinkedId(newContact)
+    }else if (phoneNumber !== null){
+      const [ newContact, _ ] = await Contact.findOrCreate({
+        where: { phoneNumber: phoneNumber },
+        defaults: { phoneNumber: phoneNumber }
+      })
+      result = await Contact.groupByLinkedId(newContact)
+    }else if(email !== null){
+      const [ newContact, _ ] = await Contact.findOrCreate({
+        where: { email: email },
+        defaults: { email: email }
+      })
+      console.log(newContact)
+      result = await Contact.groupByLinkedId(newContact)
+    }else{
+      return res.status(404).json({error: 'No contact details provided as neither email nor phoneNumber. was provided.' })
     }
     return res.status(201).json(result)
   } catch (error) {
@@ -215,9 +222,9 @@ contactRouter.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Contact not found' })
     }
 
-    contact.phoneNumber = phoneNumber
-    contact.email = email
-    contact.linkedId = linkedId
+    contact.phoneNumber = phoneNumber || null
+    contact.email = email || null
+    contact.linkedId = linkedId || null
     contact.linkPrecedence = linkPrecedence
     await contact.save()
     res.json(contact)
