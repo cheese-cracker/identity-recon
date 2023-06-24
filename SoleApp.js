@@ -54,7 +54,7 @@ Contact.findTopLinkId = async ( whereClause ) => {
 }
 
 Contact.unionCreate = async(contactObj) => {
-  let phoneLinkId, emailLinkId, otherContacts
+  let phoneLinkId, emailLinkId, otherLinkId
   let selectedLinkId = null
   let selectedLinkPrecedence = "primary"
   try{
@@ -68,23 +68,31 @@ Contact.unionCreate = async(contactObj) => {
     if(phoneLinkId !== null && phoneLinkId == emailLinkId){
       return await Contact.findByPk(phoneLinkId)
     }else if(phoneLinkId !== null && emailLinkId !== null){
+      selectedLinkPrecedence = "secondary"
       const phoneContact = await Contact.findByPk(phoneLinkId)
       const emailContact = await Contact.findByPk(emailLinkId)
 
       // Set all contacts that match the linkedId of the newer object to the older object
+      console.error(await Contact.findAll())
       if(phoneContact.createdAt < emailContact.createdAt){
         selectedLinkId = phoneLinkId
-        otherContacts = await Contact.findAll({ where: { linkedId: emailLinkId } })
+        otherLinkId    = emailLinkId
       }else{
         selectedLinkId = emailLinkId
-        otherContacts = await Contact.findAll({ where: { linkedId: phoneLinkId } })
+        otherLinkId    = phoneLinkId
       }
+      const otherContacts = await Contact.findAll({
+        where: {
+          [Op.or] : [ { linkedId: otherLinkId }, { id: otherLinkId } ]
+        }
+      })
+      console.error(otherContacts)
       await Promise.all(otherContacts.map(async (contact) => {
+          contact.linkPrecedence = selectedLinkPrecedence
           contact.linkedId = selectedLinkId
           await contact.save()
         })
       )
-      selectedLinkPrecedence = "secondary"
     }else if (phoneLinkId !== null){
       selectedLinkId = phoneLinkId
       selectedLinkPrecedence = "secondary"
@@ -109,8 +117,8 @@ Contact.unionCreate = async(contactObj) => {
 Contact.groupByLinkedId = async (contactObj) => {
   const linkId = contactObj.linkedId || contactObj.id
 
-  const allContacts = await Contact.findAll({ where:
-    {
+  const allContacts = await Contact.findAll({
+    where: {
       [Op.or] : [ { linkedId: linkId }, { id: linkId } ]
     }
   })
