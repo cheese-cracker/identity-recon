@@ -1,12 +1,12 @@
-// Helper Functions
 export const syncDB = async (sequelize) => {
   try {
     await sequelize.sync()
-    console.log('Database and tables created successfully!');
+    console.log('Database and tables created successfully!')
   } catch (error) {
     console.error('Error syncing database:', error)
   }
 }
+
 export const startServer = async (app, port) => {
   try {
     await app.listen(port)

@@ -1,9 +1,9 @@
 import express from 'express'
 import cors from 'cors'
 import sequelize  from './database.js'
-import { syncDB, startServer } from "./helpers.js"
-import identityRouter from './identityRouter.js'
-import contactRouter from './contactRouter.js'
+import { syncDB, startServer } from "./utils/helpers.js"
+import identityRouter from './routes/identity.js'
+import contactRouter from './routes/contact.js'
 
 const PORT = process.env.PORT || 8080
 

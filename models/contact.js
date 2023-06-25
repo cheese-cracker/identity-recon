@@ -1,4 +1,4 @@
-import sequelize from "./database.js" 
+import sequelize from "../database.js" 
 import { DataTypes, Op } from "sequelize"
  
 const Contact = sequelize.define('Contact', {
