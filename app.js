@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
-import sequelize  from './database.js'
-import { syncDB, startServer } from "./utils/helpers.js"
+import sequelize from './database.js'
+import { syncDB, startServer } from './utils/helpers.js'
 import identityRouter from './routes/identity.js'
 import contactRouter from './routes/contact.js'
 
@@ -11,13 +11,13 @@ const app = new express()
 
 // Add CORS
 const corsOptions = {
-  origin: "*",
-  methods: ""
+  origin: '*',
+  methods: ''
 }
 
 // Middleware Initializations
 app.use(cors(corsOptions))
-app.use(express.json());
+app.use(express.json())
 
 // Add Routes
 app.use('/contacts', contactRouter)

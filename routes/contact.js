@@ -1,5 +1,5 @@
-import express from "express"
-import Contact from "../models/contact.js"
+import express from 'express'
+import Contact from '../models/contact.js'
 
 const contactRouter = express.Router()
 
@@ -59,7 +59,6 @@ contactRouter.delete('/:id', async (req, res) => {
     }
     await contact.destroy()
     return res.sendStatus(204)
-
   } catch (error) {
     console.error('Error deleting contact:', error)
     return res.status(500).json({ error: 'Failed to delete contact' })
