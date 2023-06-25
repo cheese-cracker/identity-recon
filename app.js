@@ -1,7 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import sequelize from './database.js'
-import { syncDB, startServer } from './utils/helpers.js'
 import identityRouter from './routes/identity.js'
 import contactRouter from './routes/contact.js'
 
@@ -22,6 +21,27 @@ app.use(express.json())
 // Add Routes
 app.use('/contacts', contactRouter)
 app.use('/identity', identityRouter)
+
+
+// Wrapper functions
+async function syncDB(sequelize) {
+  try {
+    await sequelize.sync()
+    console.log('Database and tables created successfully!')
+  } catch (error) {
+    console.error('Error syncing database:', error)
+  }
+}
+
+async function startServer(app, port) {
+  try {
+    await app.listen(port)
+    console.log(`[Info] Server Started Successfully! Listening on Port: ${port}`)
+  } catch (error) {
+    console.log(error)
+    throw error
+  }
+}
 
 // Sync the model with the database
 syncDB(sequelize)

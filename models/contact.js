@@ -107,37 +107,12 @@ Contact.unionCreate = async (contactObj) => {
 }
 
 // GroupBy LinkedId and provide the results in specified format (MapReduce-like)
-Contact.groupByLinkedId = async (contactObj) => {
-  const linkId = contactObj.linkedId || contactObj.id
-
-  const allContacts = await Contact.findAll({
+Contact.groupByLinkedId = async (linkId) => {
+  return await Contact.findAll({
     where: {
       [Op.or]: [{ linkedId: linkId }, { id: linkId }]
     }
   })
-
-  // Select unique emails and phone nos. from grouped Set
-  let emailSet = new Set()
-  let phoneSet = new Set()
-  let secondaryIdSet = new Set()
-  await Promise.all(
-    allContacts.map((contact) => {
-      secondaryIdSet.add(contact.id)
-      emailSet.add(contact.email)
-      phoneSet.add(contact.phoneNumber)
-    })
-  )
-  const emailList = [...emailSet].filter((item) => item !== null)
-  const phoneList = [...phoneSet].filter((item) => item !== null)
-  const secondaryIdList = [...secondaryIdSet].filter((id) => id !== linkId)
-
-  const contactGroupObj = {
-    primaryContactId: linkId,
-    emails: emailList,
-    phoneNumbers: phoneList,
-    secondaryContactIds: secondaryIdList
-  }
-  return { contact: contactGroupObj }
 }
 
 export default Contact
