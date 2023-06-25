@@ -1,7 +1,28 @@
+## Setup
 
-## Approaches
+To install from source,
+Clone the repo, install the packages using `npm install` and then `npm start` to run the
+microservice on `http:localhost:8080`.
 
-- Simple Clustering Approach
+To run from docker,
+```bash
+docker build -t identity:dev .
+docker run -it --rm -v $(pwd):/app -v /app/node_modules -p 8080:8080 identity:dev
+```
+
+## API Overview
+
+- `POST /identity`: Identity API as mentioned
+- `GET /contacts`: List of all contacts
+- `POST /contacts`: Create new contact (with exact specs)
+- `PUT /contacts/:id`: Update contact with id 
+- `DELETE /contacts/:id`: Delete contact with id
+
+## Design Approaches
+
+Here, are three approaches for solving the problem:
+
+1. Simple Clustering Approach
     - Cluster neighbouring nodes together instead of setting all linkedIds same. 
     - Take only neighbours with matching phone_no or email
     - Advantages
@@ -12,7 +33,7 @@
     - Conclusion
         - Since edge-cases for failure may be relatively low, this approach would allow for a faster /identity function to solve for most of the cases. 
 
-- Disjoint Set Union Approach
+2. Connected Components (Disjoint Set Union) Approach
     - Every connected component can be represented by one linkedId (linkedId of the oldest node in the connected component)
     - Advantages
         - Exact linkedId would be provided. Thus, the user who would be running the application can be determined correctly
@@ -22,7 +43,7 @@
     - Conclusion
         - Not a very scalable solution however it would be very accurate.
 
-- Cron-based Approach:
+3. Cron-based Approach:
     - Another approach is using a simple table "contactTable" for contacts which include `{ email?,
         phoneNumber? }`.
     - A daily cron-job could be scheduled for grouping together all the common `{ email?,
@@ -38,20 +59,16 @@
 
 ## Author's Note
 
-In the current project, I have used the Disjoint-Set-Union Approach over the simple-clustering-approach as this is the solution which would provide the solution accurately.
+In the current project, I have used the Connected Components approach over the simple-clustering-approach as this is the solution which would provide the solution accurately.
 In the real-world implementation of this project, the clustering-approach with caching maybe more practical and recommended. 
 
 ## Enhancements
 
-- Cache common email and phoneNo. on redis. This way most of the common users can easily be
+- Cache hot emails and phoneNumbers on redis. This way most of the common users can easily be
     tracked.
 - SwaggerUI could be integrated the application for simple testing and API documentation.
 - `linkedId` could be set with a default value of `contactObj.id`. This could reduce redundant
     checks which are performed in the code.
 - Setup database migration capabilities
+- Authentication for "/identity" endpoints
 
-## Setup
-
-To install from source,
-Clone the repo, install the packages using `npm install` and then `npm start` to run the
-microservice on `http:localhost:8080`.
